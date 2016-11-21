@@ -9,12 +9,9 @@
 set -e
 set -x
 
-# Update the entire system to the latest releases
-apt-get update -qq
-apt-get dist-upgrade -qqy
 
 # install common tools
-apt-get install --yes git net-tools netcat-openbsd
+yum install -y git net-tools netcat-openbsd gcc-c++
 
 # Set Go environment variables needed by other scripts
 export GOPATH="/opt/gopath"
@@ -37,6 +34,18 @@ if echo $BINTARGETS | grep -q `uname -m`; then
    chmod 775 $GOROOT
 # else for ppc64le install go binaries from advanced toolchain
 elif [ $ARCH = ppc64le ]
+then
+   wget --quiet --no-check-certificate https://storage.googleapis.com/golang/go1.7.1.linux-s390x.tar.gz
+   tar -xvf go1.7.1.linux-s390x.tar.gz
+   yum install -y gcc-c++
+   cd /opt
+   git clone http://github.com/linux-on-ibm-z/go.git go
+   cd go/src
+   git checkout release-branch.go1.6-p256
+   export GOROOT_BOOTSTRAP=/tmp/go
+   ./make.bash
+   export GOROOT="/opt/go"
+elif [ x$MACHINE = xppc64le ]
 then
    wget --quiet ftp://ftp.unicamp.br/pub/linuxpatch/toolchain/at/ubuntu/dists/xenial/at10.0/binary-ppc64el/advance-toolchain-golang-at_10.0-1_ppc64el.deb
    dpkg -i advance-toolchain-golang-at_10.0-1_ppc64el.deb
@@ -83,17 +92,17 @@ if [ $ARCH = s390x -o $ARCH = ppc64le ]; then
     YML_FILE="sdk/linux/$ARCH/index.yml"
     wget -q -U UA_IBM_JAVA_Docker -O /tmp/index.yml $BASE_URL/$YML_FILE
     JAVA_URL=$(cat /tmp/index.yml | sed -n '/'$JAVA_VERSION'/{n;p}' | sed -n 's/\s*uri:\s//p' | tr -d '\r')
-    wget -q -U UA_IBM_JAVA_Docker -O /tmp/ibm-java.bin $JAVA_URL
-    echo "$ESUM  /tmp/ibm-java.bin" | sha256sum -c -
+    wget -q -U UA_IBM_JAVA_Docker -O /tmp/ibm-j24ava.bin $JAVA_URL
+    echo "$ESUM  /tmp/ibm-j24ava.bin" | sha256sum -c -
     echo "INSTALLER_UI=silent" > /tmp/response.properties
     echo "USER_INSTALL_DIR=/opt/ibm/java" >> /tmp/response.properties
     echo "LICENSE_ACCEPTED=TRUE" >> /tmp/response.properties
     mkdir -p /opt/ibm
-    chmod +x /tmp/ibm-java.bin
-    /tmp/ibm-java.bin -i silent -f /tmp/response.properties
+    chmod +x /tmp/ibm-j24ava.bin
+    /tmp/ibm-j24ava.bin -i silent -f /tmp/response.properties
     ln -s /opt/ibm/java/jre/bin/* /usr/local/bin/
 else
-    apt-get update && apt-get install openjdk-8-jdk -y
+    yum -y update && yum install java-1.8.0-openjdk-devel -y
 fi
 
 # ----------------------------------------------------------------
@@ -109,7 +118,7 @@ SRC_PATH=/tmp/$NODE_PKG
 cd /tmp
 rm -f node*.tar.gz
 wget --quiet https://nodejs.org/dist/v$NODE_VER/$NODE_PKG
-cd /usr/local && sudo tar --strip-components 1 -xzf $SRC_PATH
+cd /usr/local && tar --strip-components 1 -xzf $SRC_PATH
 
 # ----------------------------------------------------------------
 # Install protocol buffer support
@@ -123,8 +132,7 @@ cd /tmp
 wget --quiet https://github.com/google/protobuf/archive/$PROTOBUF_PKG
 tar xpzf $PROTOBUF_PKG
 cd protobuf-$PROTOBUF_VER
-apt-get install -y autoconf automake libtool curl make g++ unzip
-apt-get install -y build-essential
+yum install -y autoconf automake libtool curl make g++ unzip
 ./autogen.sh
 # NOTE: By default, the package will be installed to /usr/local. However, on many platforms, /usr/local/lib is not part of LD_LIBRARY_PATH.
 # You can add it, but it may be easier to just install to /usr instead.
@@ -136,16 +144,41 @@ apt-get install -y build-essential
 #./configure
 ./configure --prefix=/usr
 
-make
-make check
-make install
+make -j24
+make -j24 check
+make -j24 install
 export LD_LIBRARY_PATH=/usr/local/lib:$LD_LIBRARY_PATH
+cd ~/
+
+# ----------------------------------------------------------------
+# Install rocksdb
+# ----------------------------------------------------------------
+yum install -y snappy-devel zlib-devel
+cd /tmp
+git clone https://github.com/facebook/rocksdb.git
+cd rocksdb
+git checkout tags/v4.1
+if [ x$MACHINE = xs390x ]
+then
+    echo There were some bugs in 4.1 for z/p, dev stream has the fix, living dangereously, fixing in place
+    sed -i -e "s/-march=native/-march=z196/" build_tools/build_detect_platform
+    sed -i -e "s/-momit-leaf-frame-pointer/-DDUMBDUMMY/" Makefile
+elif [ x$MACHINE = xppc64le ]
+then
+    echo There were some bugs in 4.1 for z/p, dev stream has the fix, living dangereously, fixing in place.
+    echo Below changes are not required for newer releases of rocksdb.
+    sed -ibak 's/ifneq ($(MACHINE),ppc64)/ifeq (,$(findstring ppc64,$(MACHINE)))/g' Makefile
+fi
+
+PORTABLE=1 make -j24 shared_lib
+INSTALL_PATH=/usr/local make -j24 install-shared
+ldconfig
 cd ~/
 
 # Make our versioning persistent
 echo $BASEIMAGE_RELEASE > /etc/hyperledger-baseimage-release
 
 # clean up our environment
-apt-get -y autoremove
-apt-get clean
+yum -y autoremove
+yum clean all
 rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/*

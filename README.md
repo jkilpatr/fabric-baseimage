@@ -1,3 +1,12 @@
+# jkilpatr Fork of Hyperledger Baseimage for Centos
+
+just grab and run
+
+    make docker-local
+
+Then sit back and wait for quite some time (rocksdb takes forever to compile) when you're done hop over to my fabric fork and follow instructions there
+
+
 # Baseimage Introduction
 This directory contains the infrastructure for creating a new baseimage used as the basis for various functions within the Hyperledger workflow such as our Vagrant based development environment, chaincode compilation/execution, unit-testing, and even cluster simulation. It is based on ubuntu-16.04 with various opensource projects added such as golang, grpc, and node.js. The actual Hyperledger code is injected just-in-time before deployment.  The resulting images are published to public repositories such as [atlas.hashicorp.com](https://atlas.hashicorp.com/hyperledger/boxes/fabric-baseimage) for consumption by Vagrant/developers and [hub.docker.com](https://hub.docker.com/r/hyperledger/fabric-baseimage/) for consumption by docker-based workflows.
 
