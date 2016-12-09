@@ -1,4 +1,4 @@
-# jkilpatr Fork of Hyperledger Baseimage for Centos
+# jkilpatr's fork of Hyperledger Baseimage on Centos
 
 just grab and run
 
