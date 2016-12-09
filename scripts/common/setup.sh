@@ -13,6 +13,8 @@ set -x
 # install common tools
 yum install -y git net-tools netcat-openbsd gcc-c++
 
+MACHINE=`uname -m`
+
 # Set Go environment variables needed by other scripts
 export GOPATH="/opt/gopath"
 export GOROOT="/opt/go"
